@@ -1,0 +1,10 @@
+---
+- become_method: "sudo"
+  become_user: "root"
+  become: true
+  hosts: "localhost"
+
+  tasks:
+    - name: "set timezone"
+      community.general.timezone:
+        name: "America/Denver"
