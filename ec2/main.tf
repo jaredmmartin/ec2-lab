@@ -1,14 +1,13 @@
+############ Local Variables ############
+
+locals {
+  name_prefix = "lab"
+}
 
 ################################ Generators ################################
 
 resource "random_pet" "this" {
   prefix = local.name_prefix
-}
-
-############ Local Variables ############
-
-locals {
-  name_prefix = "lab"
 }
 
 ############ Data Sources ############
@@ -17,7 +16,7 @@ locals {
 data "aws_ami" "this" {
   filter {
     name   = "name"
-    values = ["al2023-ami-*-kernel-6.1-x86_64"]
+    values = ["al2023-ami-2023.10.*-kernel-6.1-x86_64"]
   }
   filter {
     name   = "virtualization-type"
@@ -39,11 +38,20 @@ data "aws_service_principal" "ec2" {
   service_name = "ec2"
 }
 
-data "aws_subnet" "public0" {
+data "aws_subnet" "private0" {
   availability_zone = data.aws_availability_zone.a.id
   filter {
     name   = "tag:type"
-    values = ["public"]
+    values = ["private"]
+  }
+  vpc_id = data.aws_vpc.this.id
+}
+
+data "aws_subnet" "private1" {
+  availability_zone = data.aws_availability_zone.b.id
+  filter {
+    name   = "tag:type"
+    values = ["private"]
   }
   vpc_id = data.aws_vpc.this.id
 }
@@ -81,6 +89,11 @@ data "aws_iam_policy_document" "assume_role" {
     principals {
       type        = "Service"
       identifiers = [data.aws_service_principal.ec2.name]
+    }
+    condition {
+      test     = "StringEquals"
+      values   = [data.aws_caller_identity.this.account_id]
+      variable = "aws:SourceAccount"
     }
   }
 }
@@ -159,6 +172,15 @@ resource "aws_security_group" "this" {
       "${(jsondecode(data.http.this.response_body).ip[*])[0]}/32",
       data.aws_vpc.this.cidr_block,
     ]
+    from_port = -1
+    protocol  = "icmp"
+    to_port   = -1
+  }
+  ingress {
+    cidr_blocks = [
+      "${(jsondecode(data.http.this.response_body).ip[*])[0]}/32",
+      data.aws_vpc.this.cidr_block,
+    ]
     from_port = 22
     protocol  = "tcp"
     to_port   = 22
@@ -167,16 +189,48 @@ resource "aws_security_group" "this" {
   vpc_id = data.aws_vpc.this.id
 }
 
-resource "aws_instance" "this" {
+resource "aws_instance" "thing_1" {
   ami                         = data.aws_ami.this.id
-  associate_public_ip_address = true
+  associate_public_ip_address = false
   iam_instance_profile        = aws_iam_instance_profile.this.name
-  instance_type               = "c7i.large"
+  instance_type               = "t3.small"
   key_name                    = aws_key_pair.this.key_name
-  subnet_id                   = data.aws_subnet.public0.id
+  subnet_id                   = data.aws_subnet.private0.id
   tags = {
-    Name = random_pet.this.id
+    Name = "${random_pet.this.id}-1"
   }
   user_data              = templatefile("files/userdata.sh", { aws_s3_bucket = aws_s3_bucket.this.bucket })
   vpc_security_group_ids = [aws_security_group.this.id]
+}
+
+resource "aws_instance" "thing_2" {
+  ami                         = data.aws_ami.this.id
+  associate_public_ip_address = false
+  iam_instance_profile        = aws_iam_instance_profile.this.name
+  instance_type               = "t3.small"
+  key_name                    = aws_key_pair.this.key_name
+  subnet_id                   = data.aws_subnet.private1.id
+  tags = {
+    Name = "${random_pet.this.id}-2"
+  }
+  user_data              = templatefile("files/userdata.sh", { aws_s3_bucket = aws_s3_bucket.this.bucket })
+  vpc_security_group_ids = [aws_security_group.this.id]
+}
+
+############ EC2 ############
+
+output "ec2_instance_name_1" {
+  value = aws_instance.thing_1.tags.Name
+}
+
+output "ec2_instance_private_ip_1" {
+  value = aws_instance.thing_1.private_ip
+}
+
+output "ec2_instance_name_2" {
+  value = aws_instance.thing_2.tags.Name
+}
+
+output "ec2_instance_private_ip_2" {
+  value = aws_instance.thing_2.private_ip
 }

@@ -1,24 +1,110 @@
 # ec2-lab
 
-Automation to provision a lab environment on AWS consisting of Terraform remote state S3 bucket, VPC with public and private subnets, and an EC2 instance on Amazon Linux 2023 that applies an Ansible playbook on the first boot.
+Terraform configuration to provision a simple lab environment in AWS consisting of VPC with public and private subnets and an EC2 instance on Amazon Linux 2023 that applies an Ansible playbook on the first boot.
 
 ## Overview
 
+```mermaid
+---
+config:
+  flowchart:
+    padding: 10
+  themeVariables:
+    fontFamily: 'monospace'
+    fontSize: '12px'
+    primaryColor: '#4f87a0'
+    primaryTextColor: '#f5f1e9'
+    primaryBorderColor: '#333333'
+    lineColor: '#4f87a0'
+    secondaryColor: '#054165'
+    edgeLabelBackground: 'transparent'
+---
+flowchart
+  %% VPC
+  subgraph vpc ["vpc<br/>10.64.0.0/16"]
+    %% Subnet
+    subgraph subnet_public_1 ["public subnet<br/>10.64.0.0/24"]
+      %% Nodes
+      nat_gateway_1["nat gateway"]:::gateway
+    end
+
+    %% Subnet
+    subgraph subnet_public_2 ["public subnet<br/>10.64.1.0/24"]
+      %% Nodes
+      nat_gateway_2["nat gateway"]:::gateway
+    end
+
+    %% Subnet
+    subgraph subnet_private_1 ["private subnet<br/>10.64.2.0/24"]
+      %% Nodes
+      ec2_1(("ec2 instance")):::ec2
+      vpce_ec2_1(["vpc endpoint ec2"]):::vpce
+      vpce_ec2messages_1(["vpc endpoint ec2messages"]):::vpce
+      vpce_kms_1(["vpc endpoint kms"]):::vpce
+      vpce_logs_1(["vpc endpoint logs"]):::vpce
+      vpce_s3_1(["vpc endpoint s3"]):::vpce
+      vpce_ssm_1(["vpc endpoint ssm"]):::vpce
+      vpce_ssmmessages_1(["vpc endpoint ssmmessages"]):::vpce
+    end
+
+    %% Subnet
+    subgraph subnet_private_2 ["private subnet<br/>10.64.3.0/24"]
+      %% Nodes
+      ec2_2(("ec2 instance")):::ec2
+      vpce_ec2_2(["vpc endpoint ec2"]):::vpce
+      vpce_ec2messages_2(["vpc endpoint ec2messages"]):::vpce
+      vpce_kms_2(["vpc endpoint kms"]):::vpce
+      vpce_logs_2(["vpc endpoint logs"]):::vpce
+      vpce_s3_2(["vpc endpoint s3"]):::vpce
+      vpce_ssm_2(["vpc endpoint ssm"]):::vpce
+      vpce_ssmmessages_2(["vpc endpoint ssmmessages"]):::vpce
+    end
+    
+    %% Nodes
+    internet_gateway["internet gateway"]:::gateway
+    route_table_private[["route table private"]]:::route_table
+    route_table_public[["route table public"]]:::route_table
+
+    %% Node links
+    internet_gateway <--> route_table_public
+    route_table_private <--> nat_gateway_1 & nat_gateway_2
+    route_table_private <--> subnet_private_1 & subnet_private_2
+    route_table_public <--> subnet_public_1 & subnet_public_2
+  end
+
+  %% Nodes
+  internet["internet"]:::internet
+  elastic_ip_1["elastic ip"] & elastic_ip_2["elastic ip"]:::elastic_ip
+  
+  %% Node links
+  elastic_ip_1 & elastic_ip_2 --> internet
+  nat_gateway_1 --> elastic_ip_1
+  nat_gateway_2 --> elastic_ip_2
+  internet_gateway <--> internet
+
+  %% Node styles
+  classDef ec2 fill:#faa41a,stroke:#054165,stroke-width:2px,color:#054165
+  classDef elastic_ip fill:#93b599,stroke:#f5f1e9,stroke-width:2px,color:#f5f1e9
+  classDef gateway fill:#054165,stroke:#f5f1e9,stroke-width:2px,color:#f5f1e9
+  classDef internet fill:#ededed,stroke:#054165,stroke-width:2px,color:#054165
+  classDef route_table fill:#4f87a0,stroke:#f5f1e9,stroke-width:2px,color:#f5f1e9
+  classDef subnet fill:#dadcea,stroke:#4f87a0,stroke-width:2px,color:#4f87a0
+  classDef vpc fill:#ededed,stroke:#4f87a0,stroke-width:2px,color:#4f87a0
+  classDef vpce fill:#abaed5,stroke:#f5f1e9,stroke-width:2px,color:#f5f1e9
+
+  %% Assign group styles
+  subnet_private_1:::subnet
+  subnet_private_2:::subnet
+  subnet_public_1:::subnet
+  subnet_public_2:::subnet
+  vpc:::vpc
+```
+
 This repository contains the following Terraform configurations.
-
-### state-bucket
-
-Terraform configuration to create S3 bucket for Terraform remote state files. This Terraform configuration creates the following resources:
-
-| Name | Resource Type | Description |
-| ---- | ------------- | ----------- |
-| `lab-tfstate-${aws-account-id}-${aws-region}` | S3 bucket | Terraform remote state files |
 
 ### vpc
 
-Terraform configuration to create VPC containing Internet Gateway, NAT Gateway, public and private subnets, route tables, and VPC endpoints required for AWS Systems Manager.
-
-![vpc-diagram](readme-files/vpc.png)
+Terraform configuration to create VPC containing Internet Gateway, NAT Gateways, public and private subnets, route tables, and VPC endpoints required for AWS Systems Manager.
 
 This Terraform configuration creates the following resources:
 
@@ -54,7 +140,7 @@ Terraform configuration to create S3 bucket, IAM role for EC2 instance, EC2 secu
 + The EC2 key pair is generated when applying the Terraform configuration and output to `ec2/keypair.pem`
 + The EC2 instance runs Amazon Linux 2023 and is configured with the user data script in `ec2/files/userdata.sh`
   + The user data script:
-    + Installs Python 3, boto3, Ansible, the `amazon.aws` Ansible collection, and the `community.general` Ansible collection
+    + Installs Python 3, `boto3`, Ansible, the `amazon.aws` Ansible collection, and the `community.general` Ansible collection
     + Downloads all files from the S3 bucket to `/opt/ansible/`
     + Applies the Ansible playbook `main.yml` from `/opt/ansible/`
 
@@ -107,26 +193,6 @@ To provision the resources:
     export AWS_SECRET_ACCESS_KEY=""
     ```
 
-1. Apply `state-bucket` Terraform configuration
-
-    ```bash
-    cd state-bucket
-    terraform init
-    terraform apply
-    ```
-
-1. Update the `vpc` and `ec2` Terraform provider configurations with the S3 bucket for Terraform remote state. The `state-bucket` Terraform configuration will output the name of the S3 bucket.
-   1. Open the `providers.tf` file in each directory
-   1. Replace the value of the `bucket` directive with the S3 bucket name output by the `state-bucket` Terraform configuration:
-
-      ```hcl
-      backend "s3" {
-        bucket = "${replace-me}"
-        key    = "ec2/tfstate"
-        region = "us-west-2"
-      }
-      ```
-
 1. Apply `vpc` Terraform configuration
 
     ```bash
@@ -158,13 +224,6 @@ To delete the provisioned resources, the Terraform configurations are destroyed 
   
     ```bash
     cd vpc
-    terraform destroy
-    ```
-
-1. Destroy the `state-bucket` Terraform configuration
-
-    ```bash
-    cd state-bucket
     terraform destroy
     ```
 

@@ -18,10 +18,6 @@ data "aws_caller_identity" "this" {}
 
 data "aws_region" "this" {}
 
-data "aws_service_principal" "ec2" {
-  service_name = "ec2"
-}
-
 ############ VPC ############
 
 resource "aws_vpc" "this" {
@@ -85,17 +81,27 @@ resource "aws_internet_gateway" "this" {
 }
 
 resource "aws_eip" "this" {
+  count  = 2
+  domain = "vpc"
   tags = {
     "Name" = "${local.name_prefix}-${data.aws_region.this.region}-eip-ngw"
   }
 }
 
 resource "aws_nat_gateway" "this" {
-  allocation_id = aws_eip.this.id
-  subnet_id     = aws_subnet.public0.id
+  availability_mode = "regional"
+  availability_zone_address {
+    allocation_ids    = [aws_eip.this[0].id]
+    availability_zone = data.aws_availability_zone.a.name
+  }
+  availability_zone_address {
+    allocation_ids    = [aws_eip.this[1].id]
+    availability_zone = data.aws_availability_zone.b.name
+  }
   tags = {
     "Name" = "${local.name_prefix}-${data.aws_region.this.region}-ngw"
   }
+  vpc_id = aws_vpc.this.id
 }
 
 resource "aws_route_table" "private" {
