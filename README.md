@@ -1,6 +1,6 @@
 # ec2-lab
 
-Terraform configuration to provision a simple lab environment in AWS consisting of VPC with public and private subnets and an EC2 instance on Amazon Linux 2023 that applies an Ansible playbook on the first boot.
+Terraform configuration to provision a simple lab environment in AWS consisting of VPC with public and private subnets and a pair of EC2 instances on Amazon Linux 2023 that apply an Ansible playbook on the first boot.
 
 ## Overview
 
@@ -138,7 +138,7 @@ Terraform configuration to create S3 bucket, IAM role for EC2 instance, EC2 secu
 + The IAM role for the EC2 instance contains the required permissions for the EC2 instance to be managed by AWS Systems Manager and get objects from the S3 bucket
 + The EC2 security group is configured to allow SSH access from the public IP address of the internet connection the Terraform configuration was applied from
 + The EC2 key pair is generated when applying the Terraform configuration and output to `ec2/keypair.pem`
-+ The EC2 instance runs Amazon Linux 2023 and is configured with the user data script in `ec2/files/userdata.sh`
++ The EC2 instances run Amazon Linux 2023 and are configured with the user data script in `ec2/files/userdata.sh`
   + The user data script:
     + Installs Python 3, `boto3`, Ansible, the `amazon.aws` Ansible collection, and the `community.general` Ansible collection
     + Downloads all files from the S3 bucket to `/opt/ansible/`
@@ -156,6 +156,7 @@ This Terraform configuration creates the following resources:
 | None | TLS private key | EC2 key key private key |
 | `lab-${aws-region}-key-pair` | EC2 keypair | EC2 key pair for EC2 instance. Private key output to `keypair.pem` |
 | `lab-${aws-region}-sg-ec2` | Security group | Security group for EC2 instance |
+| `lab-${random-name}` | EC2 instance | EC2 instance |
 | `lab-${random-name}` | EC2 instance | EC2 instance |
 
 To connect to the EC2 instance after provisioning:
@@ -177,7 +178,7 @@ After connecting to the EC2 instance, you can review the logs of the Ansible pla
 
 ### Ansible playbook
 
-The Ansible playbook that is executed on the EC2 instance is located at `ec2/files/s3/main.yml`. All files in the `ec2/files/s3/` directory are synced to the EC2 instance upon its first boot. Customize the Ansible playbook as needed prior to applying the `ec2` Terraform configuration.
+The Ansible playbook that is executed on the EC2 instances is located at `ec2/files/s3/main.yml`. All files in the `ec2/files/s3/` directory are synced to the EC2 instance upon its first boot. Customize the Ansible playbook as needed prior to applying the `ec2` Terraform configuration.
 
 ### Provisioning
 
