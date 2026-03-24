@@ -4,7 +4,7 @@ locals {
   name_prefix = "lab"
 }
 
-################################ Generators ################################
+############ Generators ############
 
 resource "random_pet" "this" {
   prefix = local.name_prefix
